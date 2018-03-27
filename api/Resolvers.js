@@ -7,40 +7,52 @@ const translate = require('google-translate-api')
 
 export default {
     Query: {
-        Ratings: () => {
-            return db.models.user.findAll({
-                include: [{ model: db.models.todo }]
-            }).then(users => {
-                return users.map(user=>{
+        LanguageCombinations: () => {
+            return db.models.languageCombination.findAll({
+                group: ['languageCombination.id'],
+                //add attributes of languageCombination
+                attributes: ['id', 'language', 'processingLanguages', 'translator',
+                    [db.fn('count', db.col('ratings.rating')), 'ratingCount'],
+                    [db.fn('avg', db.col('ratings.rating')), 'avgRating']],
+                include: [{attributes:[], as: 'ratings', model: db.models.rating}] //TODO ratings returning null
+                // WORKING HERE: https://github.com/sequelize/sequelize/issues/3596
+            }).then(languageCombinations => {
+                //todo filterby avg rating count and count number
+                return languageCombinations.map(languageCombination=>{
+                    const avgRating = (Math.round(languageCombination.dataValues.avgRating * 10)/10).toString()
                     return Object.assign({},
                         {
-                            id: user.id,
-                            name: user.name,
-                            todos: user.todos.map(todo=>{
-                                return Object.assign({},
-                                    {
-                                        id: todo.id,
-                                        task: todo.task,
-                                        finished: todo.finished
-                                    }
-                                )
+                            id: languageCombination.id,
+                            processingLanguages: languageCombination.processingLanguages,
+                            language: languageCombination.language,
+                            translator: languageCombination.translator,
+                            avgRating: avgRating,
+                            ratingCount: languageCombination.dataValues.ratingCount,
+                            // avgRating: 3,
+                            //  ratings: []//languageCombination.ratings.map(rating=>{
+                            //     return Object.assign({},
+                            //         {
+                            //             id: rating.id,
+                            //             languageCombinationId: languageCombination.id,
+                            //             rating: rating.rating,
+                            //             wordCount: rating.wordCount
+                            //         })
+                            // })
                         })}
                     )
                 })
-            })
         }
     },
     Mutation: {
+        //TODO SWITCH OUT CONTRACTIONS
         //TODO THESAURUS SHOULD BE ADDED AFTER REWRITE IF THERE ARE SIMILAR MATCHES OR WHAT NOT
         rewrite: async (_, data) => {
-            console.log('data is... ', data)
             const textToRewrite = data.text
             const baseLanguage = (data.language) ? data.language: 'en'
             const processingLanguages = (data.processingLanguages && data.processingLanguages.length > 0) ? data.processingLanguages : ['es']
             await processingLanguages.push('en')
 
             let processedRewrite = textToRewrite
-            console.log(processingLanguages)
             return new Promise((resolve, reject) => {
                 let index = 0
 
@@ -59,7 +71,6 @@ export default {
                         })
                     } else {
                         //TODO DEAL WITH THESAURUS HERE
-                        console.log('about to respond with ', textToRewrite, ' and ', processedRewrite)
                         resolve(Object.assign({},
                             {
                                 text: textToRewrite,
@@ -69,33 +80,30 @@ export default {
                 }
                 next()
             })
-
-            // Promise.all(processingLanguages.map(async (language, index)=>{
-            //     const startLanguage = (index === 0)? baseLanguage : processingLanguages[index - 1]
-            //     /* res.text , res.from.text.autoCorrected , res.from.text.value , res.from.text.didYouMean , res.from.language.iso (detecting) */
-            //     await translate(processedRewrite, {from: startLanguage, to: language}).then(res => {
-            //         console.log('translating from '+startLanguage+' to '+language)
-            //         console.log(processedRewrite+' ...became... '+res.text)
-            //         processedRewrite = res.text
-            //     }).catch(err => {
-            //         console.error(err);
-            //     });
-            // })).then(() => {
-            //     console.log('about to respond with ', textToRewrite, ' and ', processedRewrite)
-            //     return Object.assign({},
-            //         {
-            //             text: textToRewrite,
-            //             rewrite: processedRewrite
-            //         })
-            // })
-
         },
-        rateRewrite: (_, data) => {
-            return Object.assign({},
-                {
-                    origional: 'text',
-                    translated: 'texto'
+        rateRewrite: async (_, data) => {
+            return new Promise((resolve, reject) => {
+                db.models.languageCombination.findOrCreate({
+                    where: {
+                        processingLanguages: JSON.stringify(data.processingLanguages),
+                        language: data.language,
+                        translator: data.translator
+                    }
+                }).spread((languageCombination, createdNewLanguageCombination) => {
+                    languageCombination.createRating({
+                        rating: data.rating,
+                        wordCount: data.wordCount
+                    }).then(rating => {
+                        resolve(Object.assign({},
+                            {
+                                id: rating.id,
+                                languageCombinationId: languageCombination.id,
+                                rating: rating.rating,
+                                wordCount: rating.wordCount
+                            }))
+                    })
                 })
+            })
         }
     }
 };

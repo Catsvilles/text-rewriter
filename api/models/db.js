@@ -1,13 +1,6 @@
 import Sequelize from 'sequelize'
-/*
-const connection = mysql.createConnection({
-    host: 'wtm-lnx-2.m2', //use wtm-lnx-2.m2
-    user: 'u_kdanikowski', // use u_kdanikowski
-    password: 'Ud0b0K0MGd4k7TM6', //use Ud0b0K0MGd4k7TM6
-    database: 'x_kevinsdb_test', //use x_kevinsdb_test
-    port: 3306 //use 3306
-})
- */
+import ENV_FILE from '../envFileConfigs'
+
 /* DB NOTES AND SCHEMAS
 votes of one language into anther - save success of translation 1-5
 option for multiple languages, option to see what it translated it into
@@ -16,8 +9,8 @@ languages that spin it backwards
 additional spinning = add thesaurus
 
  */
-const Conn = new Sequelize('x_kevinsdb_test', 'u_kdanikowski', 'Ud0b0K0MGd4k7TM6', {
-    host: 'wtm-lnx-2.m2',
+const Conn = new Sequelize(ENV_FILE.dbDatabase, ENV_FILE.dbUser, ENV_FILE.dbPassword, {
+    host: ENV_FILE.dbHost,
     dialect: 'mysql',
     port: 3306,
     pool: {
@@ -27,41 +20,76 @@ const Conn = new Sequelize('x_kevinsdb_test', 'u_kdanikowski', 'Ud0b0K0MGd4k7TM6
         idle: 10000
     },
 })
-const userNameList = ['tina', 'dave', 'peter', 'rosali', 'edgar', 'pricilla', 'dominic', 'heather']
-const User = Conn.define('user',{
-    name: {
-        type: Sequelize.STRING
+const Rating = Conn.define('rating',{
+    rating: {
+        type: Sequelize.INTEGER
+    },
+    wordCount: {
+        type: Sequelize.INTEGER
     }
 })
-const ToDo = Conn.define('todo', {
-    task: {
-        type: Sequelize.STRING,
-        allowNull: true
+const LanguageCombination = Conn.define('languageCombination',{
+    processingLanguages: {
+        type: Sequelize.STRING, //DOESN'T WORK
+        get: function(){
+            return JSON.parse(this.getDataValue('processingLanguages'))
+        },
+        set: function(val){
+          const stringifiedArray = JSON.stringify(val) //removes spaces and uses only " not '
+          this.setDataValue('processingLanguages', stringifiedArray)
+        },
     },
-    finished: {
-        type: Sequelize.BOOLEAN,
-        allowNull: true,
-        defaultValue: false
-    }
+    language: {
+        type: Sequelize.STRING
+    },
+    translator: {
+        type: Sequelize.STRING
+    },
 })
 
 /*   Relations   */
-User.hasMany(ToDo)
-ToDo.belongsTo(User)
-//doing joins https://lorenstewart.me/2016/09/12/sequelize-table-associations-joins/
+LanguageCombination.hasMany(Rating)
+Rating.belongsTo(LanguageCombination)
 
-// Conn.sync({force: true}).then(()=>{ //forces tables to be overwritten
-//     userNameList.map(name => {
-//         console.log('going to create user ', name)
-//         return User.create({
-//             name: name
-//         }).then(user => {
-//             return user.createTodo({ //createTodo generated from 'todo' name, autocapitalized T.
-//                 task: `This task is ${user.name}\'s`
-//             })
-//         })
-//     })
-// })
+/* add sample data */
+// only add data once, this destoys the data tables and makes new ones with the data
+/*
+const sampleLanguageCombinationData = [
+    {
+        processingLanguages: ['es','pl','nl'],
+        language: 'en',
+        translator: 'google',
+        ratings: [{rating: 3, wordCount: 36}, {rating: 2, wordCount: 253}]
+    },{
+        processingLanguages: ['es','pl'],
+        language: 'en',
+        translator: 'google',
+        ratings: [{rating: 5, wordCount: 15}, {rating: 4, wordCount: 117}]
+    },{
+        processingLanguages: ['es'],
+        language: 'en',
+        translator: 'google',
+        ratings:[{rating: 1, wordCount: 15}]
+    }
+]
+Conn.sync({force: true}).then(()=>{ //forces tables to be overwritten
+  sampleLanguageCombinationData.map(languageCombination => {
+        console.log('going to create languageCombination ', languageCombination)
+        return LanguageCombination.create({
+          processingLanguages: languageCombination.processingLanguages,
+          language: languageCombination.language,
+          translator: languageCombination.translator
+        }).then(languageCombinationReturn => {
+            return languageCombination.ratings.map(rating=>{
+                languageCombinationReturn.createRating({
+                    rating: rating.rating,
+                    wordCount: rating.wordCount
+                })
+            })
+        })
+    })
+})
+*/
 
 
 export default Conn

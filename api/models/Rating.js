@@ -1,14 +1,19 @@
 const Rating = `
 type Rating {
-    language: String,
-    processingLanguages: [String]
+    id: String
+    languageCombinationId: String
     rating: Int
+    wordCount: Int
 }
-type Query {
+extend type Query {
     Ratings: [Rating]  
 }
-type Mutation {
-    rateRewrite (rating: Int!, language: String!, processingLanguages: [String!]!): Rating!
+extend type Mutation {
+    rateRewrite (rating: Int, 
+        language: String, 
+        processingLanguages: [String], 
+        translator: String, 
+        wordCount: Int): Rating!
 }`
 
 export default () => [Rating]
